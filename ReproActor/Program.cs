@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics.Contracts;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.ServiceFabric.Actors;
@@ -10,25 +11,34 @@ namespace ReminderExceptionRepro
 {
     internal static class Program
     {
+        private static ActorProxyFactory _actorProxyFactory = new ActorProxyFactory();
+        private static Uri _actorServiceUri = new Uri("fabric:/ReminderExceptionRepro/ReproActorService");
+
         private static async Task Main()
         {
-            try
+            //arrange
+            await ActorRuntime.RegisterActorAsync<ReproActor>(
+               (context, actorType) => new ActorService(context, actorType));
+            var actor = _actorProxyFactory.CreateActorProxy<IReproActor>(
+                _actorServiceUri, new ActorId("repro"));
+
+            //act
+            await actor.RegisterNonRepeatingReminderAsync(default);
+            //reminder expires some nonzero in future but before this delay is over
+            await Task.Delay(Constants.DelayedNeededToInduceError);
+
+            //assert (throws exception)
+            try { await actor.UnregisterNonRepeatingReminderAsync(default); }
+            catch (AggregateException ae)
             {
-                await ActorRuntime.RegisterActorAsync<ReproActor>(
-                   (context, actorType) => new ActorService(context, actorType));
-                var actorProxyFactory = new ActorProxyFactory();
-                var actor = actorProxyFactory.CreateActorProxy<IReproActor>(
-                    new Uri("fabric:/ReminderExceptionRepro/ReproActorService"), 
-                    new ActorId("repro"));
-                await actor.ArrangeAsync(default);
-                await Task.Delay(TimeSpan.FromSeconds(1));
-                await actor.AssertAsync(default);
-                await Task.Delay(Timeout.InfiniteTimeSpan);
-            }
-            catch (Exception e)
-            {
-                // this exeption proves the difference in behavior
-                throw;
+                ae.Handle(e =>
+                {
+                    if (e is ReminderNotFoundException)
+                    {
+                        return false;
+                    }
+                    return true;
+                });
             }
         }
     }

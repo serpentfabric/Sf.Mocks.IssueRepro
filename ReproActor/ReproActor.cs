@@ -12,33 +12,39 @@ namespace ReminderExceptionRepro
     {
         private IActorReminder _reminder;
 
-        private readonly TaskCompletionSource<bool> _tcs = new TaskCompletionSource<bool>();
-
         public TimeSpan NeverRepeatReminder => TimeSpan.FromMilliseconds(-1);
 
-        public ReproActor(ActorService actorService, ActorId actorId) 
+        public ReproActor(ActorService actorService, ActorId actorId)
             : base(actorService, actorId)
         {
         }
 
-        public async Task ArrangeAsync(CancellationToken cancellationToken)
+        public async Task RegisterNonRepeatingReminderAsync(CancellationToken cancellationToken)
         {
             _reminder = await RegisterReminderAsync(nameof(ReproActor),
                 Array.Empty<byte>(),
-                TimeSpan.Zero,
+                TimeSpan.FromSeconds(1),
                 NeverRepeatReminder);
         }
 
-        public async Task AssertAsync(CancellationToken cancellationToken)
+        public async Task UnregisterNonRepeatingReminderAsync(CancellationToken cancellationToken)
         {
-            await _tcs.Task;
             await UnregisterReminderAsync(_reminder);
         }
 
         protected override Task OnActivateAsync()
         {
             base.OnActivateAsync();
-            _reminder = GetReminder(nameof(ReproActor));
+            try
+            {
+                _reminder = GetReminder(nameof(ReproActor));
+            }
+            catch (ReminderNotFoundException rmne)
+            {
+                //squelch purposely here
+                //if this reminder was not set before the actor was deactivated, then this exception is thrown
+                //if this reminder had been set before the actor was deactivated, then no exception need be caught
+            }
             return Task.CompletedTask;
         }
 
@@ -47,7 +53,6 @@ namespace ReminderExceptionRepro
             TimeSpan dueTime,
             TimeSpan period)
         {
-            _tcs.TrySetResult(true);
             return Task.CompletedTask;
         }
     }

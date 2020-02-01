@@ -9,8 +9,8 @@ namespace ReminderExceptionRepro.Interfaces
 {
     public interface IReproActor : IActor
     {
-        Task ArrangeAsync(CancellationToken cancellationToken);
+        Task RegisterNonRepeatingReminderAsync(CancellationToken cancellationToken);
 
-        Task AssertAsync(CancellationToken cancellationToken);
+        Task UnregisterNonRepeatingReminderAsync(CancellationToken cancellationToken);
     }
 }
